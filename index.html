@@ -1,0 +1,289 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <meta name="theme-color" content="#0b1220" />
+
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png" />
+
+  <title>Rochester wireline length calculator</title>
+
+  <style>
+    :root { color-scheme: dark; }
+    body {
+      margin: 0;
+      font-family: -apple-system, system-ui, Segoe UI, Roboto, Arial, sans-serif;
+      background: #070b14;
+      color: #e7eaf0;
+    }
+    .wrap {
+      max-width: 720px;
+      margin: 0 auto;
+      padding: 18px 14px 28px;
+    }
+    .card {
+      background: #0b1220;
+      border: 1px solid #1a2440;
+      border-radius: 18px;
+      padding: 14px;
+      box-shadow: 0 8px 30px rgba(0,0,0,.35);
+    }
+    .title {
+      font-size: 24px;
+      font-weight: 800;
+      letter-spacing: .2px;
+      margin: 6px 0 10px;
+      text-align: center;
+    }
+    .sub {
+      opacity: .8;
+      font-size: 13px;
+      text-align: center;
+      margin: 0 0 14px;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 10px;
+    }
+    @media (min-width: 680px) {
+      .grid { grid-template-columns: 1fr 1fr; }
+    }
+    label { font-size: 13px; opacity: .9; display: block; margin: 0 0 6px; }
+    input {
+      width: 100%;
+      font-size: 18px;
+      padding: 12px 12px;
+      border-radius: 12px;
+      border: 1px solid #223055;
+      background: #0a1020;
+      color: #e7eaf0;
+      outline: none;
+    }
+    input:focus { border-color: #3c58a8; box-shadow: 0 0 0 3px rgba(60,88,168,.22); }
+    .row {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 10px;
+      margin-top: 10px;
+    }
+    @media (min-width: 680px) {
+      .row { grid-template-columns: 1fr 1fr; }
+    }
+    button {
+      font-size: 16px;
+      padding: 12px 14px;
+      border-radius: 12px;
+      border: 1px solid #2a3b6c;
+      background: #132042;
+      color: #e7eaf0;
+      cursor: pointer;
+    }
+    button:active { transform: translateY(1px); }
+    .btns { display: flex; gap: 10px; flex-wrap: wrap; }
+    .result {
+      margin-top: 14px;
+      display: grid;
+      gap: 10px;
+    }
+    .pill {
+      background: #0a1020;
+      border: 1px solid #223055;
+      border-radius: 14px;
+      padding: 12px;
+    }
+    .big {
+      font-size: 22px;
+      font-weight: 800;
+      margin-top: 4px;
+    }
+    .muted { opacity: .78; font-size: 13px; }
+    .warn {
+      color: #ffd37a;
+      font-size: 13px;
+      margin-top: 8px;
+    }
+    .footer {
+      opacity: .65;
+      font-size: 12px;
+      margin-top: 12px;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card">
+      <div class="title">Rochester wireline length calculator</div>
+      <p class="sub">Offline PWA • iPhone + Android • saves last values</p>
+
+      <div class="grid">
+        <div>
+          <label for="temp">Temperature (°C)</label>
+          <input id="temp" inputmode="decimal" placeholder="e.g. 35 or 8.5" />
+        </div>
+        <div>
+          <label for="res">Measured resistance (Ω)</label>
+          <input id="res" inputmode="decimal" placeholder="e.g. 22.6" />
+        </div>
+      </div>
+
+      <div class="row">
+        <div class="btns">
+          <button id="calc">Calculate</button>
+          <button id="swap">°C ⇄ °F</button>
+          <button id="clear">Clear</button>
+        </div>
+        <div class="pill">
+          <div class="muted">Resistance per metre (Ω/m)</div>
+          <div id="rpm" class="big">—</div>
+          <div id="mode" class="muted">—</div>
+        </div>
+      </div>
+
+      <div class="result">
+        <div class="pill">
+          <div class="muted">Length</div>
+          <div id="len_m" class="big">—</div>
+          <div id="len_km" class="muted">—</div>
+          <div id="len_ft" class="muted">—</div>
+          <div id="note" class="warn"></div>
+        </div>
+      </div>
+
+      <div class="footer">Tip: On iPhone, open in Safari → Share → Add to Home Screen.</div>
+    </div>
+  </div>
+
+<script>
+(() => {
+  // Derived from your spreadsheet table (exact linear slope).
+  // rpm(T) = b + m*T  (Ω/m)
+  const m = 0.0003405382222222222;
+  const b = 0.07844298888888888;
+
+  const $ = (id) => document.getElementById(id);
+
+  const tempEl = $("temp");
+  const resEl  = $("res");
+  const rpmEl  = $("rpm");
+  const modeEl = $("mode");
+  const lenMEl = $("len_m");
+  const lenKmEl= $("len_km");
+  const lenFtEl= $("len_ft");
+  const noteEl = $("note");
+
+  // Remember last values
+  const load = () => {
+    const t = localStorage.getItem("rochester_temp");
+    const r = localStorage.getItem("rochester_res");
+    const unit = localStorage.getItem("rochester_unit") || "C"; // "C" or "F"
+    if (t) tempEl.value = t;
+    if (r) resEl.value = r;
+    setUnit(unit, false);
+  };
+
+  const save = () => {
+    localStorage.setItem("rochester_temp", tempEl.value.trim());
+    localStorage.setItem("rochester_res", resEl.value.trim());
+  };
+
+  const fmt = (x, dp=1) => {
+    if (!isFinite(x)) return "—";
+    return x.toLocaleString(undefined, { maximumFractionDigits: dp, minimumFractionDigits: dp });
+  };
+
+  const toC = (val, unit) => unit === "F" ? (val - 32) * 5/9 : val;
+  const toF = (val) => (val * 9/5) + 32;
+
+  function getUnit() {
+    return localStorage.getItem("rochester_unit") || "C";
+  }
+
+  function setUnit(unit, convertCurrent=true) {
+    const prev = getUnit();
+    if (prev === unit) return;
+
+    // Convert current number in the temp box if it’s valid
+    if (convertCurrent) {
+      const x = parseFloat(tempEl.value);
+      if (isFinite(x)) {
+        tempEl.value = unit === "F" ? fmt(toF(x), 1) : fmt(toC(x, "F"), 1);
+      }
+    }
+
+    localStorage.setItem("rochester_unit", unit);
+    tempEl.previousElementSibling.textContent = `Temperature (°${unit})`;
+  }
+
+  function calc() {
+    noteEl.textContent = "";
+
+    const unit = getUnit();
+    const tIn = parseFloat(tempEl.value);
+    const rIn = parseFloat(resEl.value);
+
+    if (!isFinite(tIn) || !isFinite(rIn) || rIn <= 0) {
+      rpmEl.textContent = "—";
+      modeEl.textContent = "—";
+      lenMEl.textContent = "—";
+      lenKmEl.textContent = "—";
+      lenFtEl.textContent = "—";
+      return;
+    }
+
+    const tC = toC(tIn, unit);
+    const rpm = b + m * tC;  // linear; naturally extrapolates
+    const lengthM = rIn / rpm;
+
+    rpmEl.textContent  = rpm.toFixed(8);
+    modeEl.textContent = `using rpm(T) = ${b.toFixed(8)} + ${m.toFixed(16)} × T(°C)`;
+
+    lenMEl.textContent  = `${fmt(lengthM, 1)} m`;
+    lenKmEl.textContent = `${fmt(lengthM / 1000, 3)} km`;
+    lenFtEl.textContent = `${fmt(lengthM * 3.280839895, 1)} ft`;
+
+    // Optional “out of original chart range” hint (your sheet starts at 5°C..50°C)
+    if (tC < 5 || tC > 50) {
+      noteEl.textContent = `Temp is outside 5–50°C; result is extrapolated.`;
+    }
+
+    save();
+  }
+
+  // Buttons
+  $("calc").addEventListener("click", calc);
+  $("clear").addEventListener("click", () => {
+    tempEl.value = "";
+    resEl.value = "";
+    localStorage.removeItem("rochester_temp");
+    localStorage.removeItem("rochester_res");
+    calc();
+    tempEl.focus();
+  });
+
+  $("swap").addEventListener("click", () => {
+    const unit = getUnit();
+    setUnit(unit === "C" ? "F" : "C", true);
+    calc();
+  });
+
+  // Auto-calc as you type
+  tempEl.addEventListener("input", calc);
+  resEl.addEventListener("input", calc);
+
+  // Service worker for offline
+  if ("serviceWorker" in navigator) {
+    window.addEventListener("load", () => {
+      navigator.serviceWorker.register("./sw.js").catch(() => {});
+    });
+  }
+
+  load();
+  calc();
+})();
+</script>
+</body>
+</html>
